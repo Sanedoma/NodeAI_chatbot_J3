@@ -1,19 +1,17 @@
-const weatherTool = [
-    {
-        type: "function",
-        function: {
-            name: "getWeather",
-            description: "Donne la météo d'une ville",
-            parameters: {
-                type: "object",
-                properties: {
-                    city: { type: "string" }
-                },
-                required: ["city"]
-            }
+const weatherTool = {
+    type: "function",
+    function: {
+        name: "getWeather",
+        description: "Donne la météo actuelle d'une ville",
+        parameters: {
+            type: "object",
+            properties: {
+                city: { type: "string" }
+            },
+            required: ["city"]
         }
     }
-];
+};
 
 async function getWeather({ city }) {
     // wttr.in : API météo publique, format JSON, aucune clé requise

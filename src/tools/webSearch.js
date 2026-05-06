@@ -1,19 +1,17 @@
-const webSearchTool = [
-    {
-        type: "function",
-        function: {
-            name: "webSearch",
-            description: "Recherche sur le web",
-            parameters: {
-                type: "object",
-                properties: {
-                    query: { type: "string" }
-                },
-                required: ["query"]
-            }
+const webSearchTool = {
+    type: "function",
+    function: {
+        name: "webSearch",
+        description: "Recherche des informations récentes sur le web",
+        parameters: {
+            type: "object",
+            properties: {
+                query: { type: "string" }
+            },
+            required: ["query"]
         }
     }
-]
+};
 
 async function webSearchfunct(query) {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;

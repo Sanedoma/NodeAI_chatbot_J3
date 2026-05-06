@@ -25,97 +25,105 @@ const messages = [
     ` },
 ];
 
-const tools = [weatherTool, webSearchTool, ragTool, calculateTool];
+const tools = [
+    weatherTool,
+    webSearchTool,
+    ragTool,
+    calculateTool
+];
+const toolsFunctions = [getWeather, webSearchfunct, searchDocs, calculate];
 
 
-async function chat(userInput) {
+async function runAgent(userInput) {
+
     if (userInput) {
         messages.push({ role: 'user', content: userInput });
     }
 
-    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
-        },
-        body: JSON.stringify({
-            model: 'mistral-small-latest',
-            messages,
-            tools
-        })
-    });
+    let iterations = 0;
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Mistral Error ${response.status} : ${errorText}`);
-    }
+    while (iterations < 10) {
+        iterations++;
 
-    const data = await response.json();
-    const message = data.choices[0].message;
+        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'mistral-small-latest',
+                messages,
+                tools,
+                tool_choice: 'auto'
+            })
+        });
 
-    // 🧠 TOOL CALLS EN PARALLÈLE
-    if (message.tool_calls) {
-        // On ajoute le message de l'assistant (qui contient les appels d'outils) UNE SEULE FOIS
+        const data = await response.json();
+        const message = data.choices[0].message;
+
         messages.push(message);
 
-        const toolResults = await Promise.all(
-            message.tool_calls.map(async (toolCall) => {
-                const args = JSON.parse(toolCall.function.arguments);
-                let result;
+        // ✅ FIN
+        if (data.choices[0].finish_reason === "stop") {
+            return message.content;
+        }
 
-                console.log("TOOL UTILISÉ :", toolCall.function.name);
+        // ✅ TOOL CALLS
+        if (data.choices[0].finish_reason === "tool_calls") {
 
-                switch (toolCall.function.name) {
-                    case "getWeather":
-                        // getWeather attend maintenant un objet { city }
-                        result = await getWeather({ city: args.city });
-                        break;
+            const toolResults = await Promise.all(
+                message.tool_calls.map(async (toolCall) => {
 
-                    case "webSearch":
-                        result = await webSearchfunct(args.query);
-                        break;
+                    const args = JSON.parse(toolCall.function.arguments);
+                    let result;
 
-                    case "searchDocs":
-                        const docs = searchDocs(args.query);
-                        if (docs.length === 0) {
-                            result = "Aucune information trouvée dans la base interne.";
-                        } else {
-                            result = `Contexte Interne:\n${docs.join("\n")}\n\nUtilise ces informations pour répondre à la question utilisateur.`;
-                        }
-                        break;
+                    console.log("🔧 TOOL :", toolCall.function.name, args);
 
-                    case "calculate":
-                        result = calculate(args.expression);
-                        break;
+                    switch (toolCall.function.name) {
 
-                    default:
-                        result = "Tool inconnu";
-                }
+                        case "getWeather":
+                            result = await getWeather(args);
+                            break;
 
-                return {
-                    role: "tool",
-                    tool_call_id: toolCall.id,
-                    content: typeof result === 'string' ? result : JSON.stringify(result)
-                };
-            })
-        );
+                        case "webSearch":
+                            result = await webSearchfunct(args.query);
+                            break;
 
-        // On ajoute tous les résultats d'un coup
-        messages.push(...toolResults);
+                        case "searchDocs":
+                            const docs = searchDocs(args.query);
+                            result = docs.length > 0
+                                ? docs
+                                : { message: "Aucune info interne" };
+                            break;
 
-        return await chat(); // relance sans input
+                        case "calculate":
+                            result = calculate(args);
+                            break;
+
+                        default:
+                            result = { error: "Tool inconnu" };
+                    }
+
+                    return {
+                        role: "tool",
+                        tool_call_id: toolCall.id,
+                        content: JSON.stringify(result)
+                    };
+                })
+            );
+
+            messages.push(...toolResults);
+        }
     }
 
-    messages.push({ role: "assistant", content: message.content });
-
-    return message.content;
+    return "Erreur : boucle infinie évitée.";
 }
 
 
 while (true) {
     const userInput = readlineSync.question("User: ");
     if (userInput === "code:breaker") break;
-    const response = await chat(userInput);
+    const response = await runAgent(userInput);
     console.log("Agent: ", response);
 }

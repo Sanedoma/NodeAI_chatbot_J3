@@ -8,7 +8,7 @@ const ragTool = {
     type: "function",
     function: {
         name: "searchDocs",
-        description: "Recherche des informations pertinentes dans une base interne pour aider à répondre à une question",
+        description: "Recherche dans les documents internes",
         parameters: {
             type: "object",
             properties: {
