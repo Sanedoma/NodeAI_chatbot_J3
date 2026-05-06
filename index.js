@@ -54,53 +54,55 @@ async function chat(userInput) {
     const data = await response.json();
     const message = data.choices[0].message;
 
-    // 🧠 TOOL CALL
+    // 🧠 TOOL CALLS EN PARALLÈLE
     if (message.tool_calls) {
-        for (const toolCall of message.tool_calls) {
-            const args = JSON.parse(toolCall.function.arguments);
-            let result;
+        // On ajoute le message de l'assistant (qui contient les appels d'outils) UNE SEULE FOIS
+        messages.push(message);
 
-            switch (toolCall.function.name) {
-                case "getWeather":
-                    result = getWeather(args.city);
-                    break;
+        const toolResults = await Promise.all(
+            message.tool_calls.map(async (toolCall) => {
+                const args = JSON.parse(toolCall.function.arguments);
+                let result;
 
-                case "webSearch":
-                    result = await webSearchfunct(args.query);
-                    break;
+                console.log("TOOL UTILISÉ :", toolCall.function.name);
 
-                case "searchDocs":
-                    const docs = searchDocs(args.query);
-                    if (docs.length === 0) {
-                        result = "Aucune information trouvée dans la base interne.";
+                switch (toolCall.function.name) {
+                    case "getWeather":
+                        // getWeather attend maintenant un objet { city }
+                        result = await getWeather({ city: args.city });
                         break;
-                    }
-                    result = `
-                        Contexte Interne:
-                        ${docs.join("\n")}
 
-                        Utilise ces informations pour répondre à la question utilisateur.
-                    `;
-                    break;
+                    case "webSearch":
+                        result = await webSearchfunct(args.query);
+                        break;
 
-                case "calculate":
-                    result = calculate(args.expression);
-                    break;
+                    case "searchDocs":
+                        const docs = searchDocs(args.query);
+                        if (docs.length === 0) {
+                            result = "Aucune information trouvée dans la base interne.";
+                        } else {
+                            result = `Contexte Interne:\n${docs.join("\n")}\n\nUtilise ces informations pour répondre à la question utilisateur.`;
+                        }
+                        break;
 
-                default:
-                    result = "Tool inconnu";
-            }
+                    case "calculate":
+                        result = calculate(args.expression);
+                        break;
 
-            console.log("TOOL UTILISÉ :", toolCall.function.name);
+                    default:
+                        result = "Tool inconnu";
+                }
 
-            messages.push(message);
+                return {
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: typeof result === 'string' ? result : JSON.stringify(result)
+                };
+            })
+        );
 
-            messages.push({
-                role: "tool",
-                tool_call_id: toolCall.id,
-                content: result
-            });
-        }
+        // On ajoute tous les résultats d'un coup
+        messages.push(...toolResults);
 
         return await chat(); // relance sans input
     }
