@@ -10,7 +10,7 @@ const ragTool = {
     type: "function",
     function: {
         name: "searchDocs",
-        description: "Recherche dans les documents internes",
+        description: "Recherche les passages pertinents dans les documents internes",
         parameters: {
             type: "object",
             properties: {
@@ -23,38 +23,18 @@ const ragTool = {
 
 async function searchDocs(query) {
     const results = await searchSimilar(query);
-    const context = results
-        .map(r => r.metadata?.text)
+    const relevantResults = results.filter(result => (result.score ?? 0) >= 0.75);
+    const context = relevantResults
+        .map(result => result.metadata?.text)
+        .filter(Boolean)
         .join("\n\n");
 
+    if (!context) {
+        return "";
+    }
+
     console.log("Context du chats:\n", context);
-
-    const response = await fetch(
-        "https://api.mistral.ai/v1/chat/completions",
-        {
-            method: 'POST',
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'mistral-small-latest',
-                messages: [
-                    {
-                        role: "system",
-                        content: "Réponds uniquement avec le contexte fourni. si l'info n'est pas présente, signal le."
-                    },
-                    {
-                        role: 'user',
-                        content: `Context: \n${context}\n\nQuestions: ${query}`
-                    }
-                ]
-            })
-        }
-    );
-
-    const data = await response.json()
-    return data.choices[0].message.content;
+    return context;
 }
 
 
