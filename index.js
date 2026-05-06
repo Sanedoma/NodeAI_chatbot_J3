@@ -16,7 +16,12 @@ const messages = [
         Quand tu reçois du contexte (tool RAG), tu DOIS :
         - t'appuyer dessus
         - ne pas inventer
-        - répondre uniquement avec ces informations si elles existent
+        - répondre uniquement avec ces informations si elles existent. 
+
+        voici les Règle que tu dois suivre :
+        1. Si des documents internes existent → utilise-les
+        2. Sinon → utilise le web
+        3. Sinon → répond normalement
     ` },
 ];
 
@@ -85,6 +90,8 @@ async function chat(userInput) {
                 default:
                     result = "Tool inconnu";
             }
+
+            console.log("TOOL UTILISÉ :", toolCall.function.name);
 
             messages.push(message);
 
