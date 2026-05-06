@@ -33,6 +33,50 @@ const tools = [
 ];
 const toolsFunctions = [getWeather, webSearchfunct, searchDocs, calculate];
 
+function formatToolFallback() {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+
+        if (message.role === 'user') {
+            break;
+        }
+
+        if (message.role !== 'tool') {
+            continue;
+        }
+
+        try {
+            const data = JSON.parse(message.content);
+
+            if (data && typeof data === 'object') {
+                if ('city' in data && 'temperature_c' in data) {
+                    return `À ${data.city}, il fait ${data.temperature_c}°C, ressenti ${data.feels_like_c}°C. ${data.description}. Humidité ${data.humidity}, vent ${data.wind_kmph} km/h.`;
+                }
+
+                if ('result' in data) {
+                    return `Le résultat est ${data.result}.`;
+                }
+
+                if (Array.isArray(data)) {
+                    const items = data
+                        .slice(0, 3)
+                        .map(item => item?.text || item?.message || JSON.stringify(item))
+                        .join(' ; ');
+                    return items || 'J’ai trouvé des informations, mais je ne peux pas les formuler davantage pour le moment.';
+                }
+
+                if ('message' in data) {
+                    return data.message;
+                }
+            }
+        } catch {
+            return message.content;
+        }
+    }
+
+    return 'Le service de réponse est temporairement saturé. Réessaie dans un instant.';
+}
+
 
 async function runAgent(userInput) {
 
@@ -45,19 +89,35 @@ async function runAgent(userInput) {
     while (iterations < 10) {
         iterations++;
 
-        const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'mistral-small-latest',
-                messages,
-                tools,
-                tool_choice: 'auto'
-            })
-        });
+        let response;
+
+        try {
+            response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'mistral-small-latest',
+                    messages,
+                    tools,
+                    tool_choice: 'auto'
+                })
+            });
+        } catch (error) {
+            throw new Error(`Impossible de contacter Mistral: ${error.message}`);
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+
+            if (response.status === 429) {
+                return formatToolFallback();
+            }
+
+            throw new Error(`API Mistral Error ${response.status} : ${errorText}`);
+        }
 
         const data = await response.json();
         const message = data.choices[0].message;
@@ -91,7 +151,7 @@ async function runAgent(userInput) {
                             break;
 
                         case "searchDocs":
-                            const docs = searchDocs(args.query);
+                            const docs = await searchDocs(args.query);
                             result = docs.length > 0
                                 ? docs
                                 : { message: "Aucune info interne" };

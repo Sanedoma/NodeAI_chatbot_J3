@@ -1,3 +1,5 @@
+import { searchSimilar } from "../pinecone/query.js";
+
 const documents = [
     "Le RAG permet d'utiliser des documents internes.",
     "Node.js est utilisé pour le backend.",
@@ -19,25 +21,44 @@ const ragTool = {
     }
 };
 
-function searchDocs(query) {
-    const words = query.toLowerCase().split(" ");
+async function searchDocs(query) {
+    const results = await searchSimilar(query);
+    const context = results
+        .map(r => r.metadata?.text)
+        .join("\n\n");
 
-    const scored = documents.map(doc => {
-        let score = 0;
+    console.log("Context du chats:\n", context);
 
-        for (const word of words) {
-            if (doc.toLowerCase().includes(word)) {
-                score++;
-            }
+    const response = await fetch(
+        "https://api.mistral.ai/v1/chat/completions",
+        {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'mistral-small-latest',
+                messages: [
+                    {
+                        role: "system",
+                        content: "Réponds uniquement avec le contexte fourni. si l'info n'est pas présente, signal le."
+                    },
+                    {
+                        role: 'user',
+                        content: `Context: \n${context}\n\nQuestions: ${query}`
+                    }
+                ]
+            })
         }
+    );
 
-        return { doc, score };
-    });
-
-    return scored
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3)
-        .map(item => item.doc);
+    const data = await response.json()
+    return data.choices[0].message.content;
 }
 
-export { ragTool, searchDocs }
+
+
+export { ragTool, searchDocs };
+
+

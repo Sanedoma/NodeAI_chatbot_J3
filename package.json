@@ -7,7 +7,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node ./src/pinecone/test.js",
+    "dev": "node index.js",
+    "intial": "node ./src/inisiate.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
